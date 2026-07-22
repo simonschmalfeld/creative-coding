@@ -1,0 +1,593 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Neon Kanji</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Zen+Tokyo+Zoo&family=M+PLUS+1:wght@900&family=Share+Tech+Mono&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        background: #000;
+        overflow: hidden;
+        width: 100vw;
+        height: 100vh;
+      }
+      canvas {
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"></script>
+    <script>
+      // Kanji data sourced via kanjiapi.dev (https://kanjiapi.dev/v1/kanji/{char})
+      const KANJI_DATA = {
+        龍: { kana: "りゅう", romaji: "ryuu", meaning: "Dragon" },
+        魂: { kana: "たましい", romaji: "tamashii", meaning: "Soul" },
+        炎: { kana: "ほのお", romaji: "honoo", meaning: "Flame" },
+        雷: { kana: "かみなり", romaji: "kaminari", meaning: "Thunder" },
+        夢: { kana: "ゆめ", romaji: "yume", meaning: "Dream" },
+        侍: { kana: "さむらい", romaji: "samurai", meaning: "Samurai" },
+        戦: { kana: "いくさ", romaji: "ikusa", meaning: "Battle" },
+        神: { kana: "かみ", romaji: "kami", meaning: "God" },
+        鬼: { kana: "おに", romaji: "oni", meaning: "Demon" },
+        剣: { kana: "けん", romaji: "ken", meaning: "Sword" },
+        闇: { kana: "やみ", romaji: "yami", meaning: "Darkness" },
+        光: { kana: "ひかり", romaji: "hikari", meaning: "Light" },
+        風: { kana: "かぜ", romaji: "kaze", meaning: "Wind" },
+        命: { kana: "いのち", romaji: "inochi", meaning: "Life" },
+        運: { kana: "うん", romaji: "un", meaning: "Fate" },
+        道: { kana: "みち", romaji: "michi", meaning: "Path" },
+        刀: { kana: "かたな", romaji: "katana", meaning: "Katana" },
+        爆: { kana: "ばく", romaji: "baku", meaning: "Explosion" },
+        猛: { kana: "もう", romaji: "mou", meaning: "Fierce" },
+        覇: { kana: "は", romaji: "ha", meaning: "Supremacy" },
+        烈: { kana: "れつ", romaji: "retsu", meaning: "Intense" },
+        斬: { kana: "ざん", romaji: "zan", meaning: "Slash" },
+        鋼: { kana: "はがね", romaji: "hagane", meaning: "Steel" },
+        幻: { kana: "まぼろし", romaji: "maboroshi", meaning: "Illusion" },
+        獄: { kana: "ごく", romaji: "goku", meaning: "Prison" },
+        狂: { kana: "きょう", romaji: "kyou", meaning: "Madness" },
+        滅: { kana: "めつ", romaji: "metsu", meaning: "Ruin" },
+        砕: { kana: "くだ", romaji: "kuda", meaning: "Shatter" },
+        剛: { kana: "ごう", romaji: "gou", meaning: "Strength" },
+        嵐: { kana: "あらし", romaji: "arashi", meaning: "Storm" },
+      };
+
+      document.fonts.ready.then(() => {
+        new p5(sketch);
+      });
+
+      const sketch = (p) => {
+        const KANJI = Object.keys(KANJI_DATA);
+
+        let currentKanji, nextKanji;
+        let particles = [];
+        let scanY = 0;
+        let hueShift = 0;
+        let bgKanji = [];
+
+        // Auto-change timer
+        const KANJI_DURATION = 300; // frames (~5s at 60fps)
+        let kanjiTimer = 0;
+
+        // Glitch transition state
+        // Phase: 0=idle, 1=breaking up (0→BREAK_FRAMES), 2=reform (0→REFORM_FRAMES)
+        const BREAK_FRAMES = 2;
+        const REFORM_FRAMES = 3;
+        let txPhase = 0; // 0=none, 1=break, 2=reform
+        let txFrame = 0;
+        let glitchSlices = [];
+
+        // Ambient idle glitch
+        let idleGlitchTimer = 0;
+        let idleGlitchActive = false;
+        let idleGlitchOffset = [];
+
+        const PALETTES = [
+          {
+            core: [255, 60, 80],
+            mid: [220, 0, 180],
+            outer: [80, 0, 255],
+            accent: [255, 220, 0],
+          },
+          {
+            core: [255, 100, 0],
+            mid: [255, 0, 100],
+            outer: [140, 0, 200],
+            accent: [0, 200, 255],
+          },
+          {
+            core: [200, 0, 255],
+            mid: [255, 0, 80],
+            outer: [255, 80, 0],
+            accent: [255, 255, 0],
+          },
+        ];
+        let currentPalette = 0;
+        let palette;
+
+        p.setup = () => {
+          p.createCanvas(p.windowWidth, p.windowHeight);
+          p.textAlign(p.CENTER, p.CENTER);
+          currentKanji = randomKanji();
+          palette = PALETTES[currentPalette];
+
+          for (let i = 0; i < 18; i++) {
+            bgKanji.push({
+              k: randomKanji(),
+              x: p.random(p.width),
+              y: p.random(p.height),
+              size: p.random(30, 90),
+              alpha: p.random(15, 45),
+              speed: p.random(0.1, 0.4),
+              drift: p.random(-0.3, 0.3),
+            });
+          }
+          for (let i = 0; i < 80; i++) particles.push(makeParticle());
+        };
+
+        const recentKanji = [];
+        function randomKanji() {
+          const pool = KANJI.filter((k) => !recentKanji.includes(k));
+          const pick = pool[Math.floor(Math.random() * pool.length)];
+          recentKanji.push(pick);
+          if (recentKanji.length > 10) recentKanji.shift();
+          return pick;
+        }
+
+        function triggerTransition() {
+          if (txPhase !== 0) return;
+          nextKanji = randomKanji();
+          currentPalette = (currentPalette + 1) % PALETTES.length;
+          txPhase = 1;
+          txFrame = 0;
+          kanjiTimer = 0;
+          buildGlitchSlices();
+        }
+
+        function buildGlitchSlices() {
+          glitchSlices = [];
+          const count = Math.floor(p.random(18, 35));
+          for (let i = 0; i < count; i++) {
+            glitchSlices.push({
+              y: p.random(p.height),
+              h: p.random(3, 40),
+              dx: p.random(-p.width * 0.35, p.width * 0.35),
+              col: p.random(["red", "cyan", "white", "purple"]),
+              alpha: p.random(80, 220),
+            });
+          }
+        }
+
+        function makeParticle() {
+          return {
+            x: p.random(p.width),
+            y: p.random(p.height),
+            vx: p.random(-0.6, 0.6),
+            vy: p.random(-1.2, -0.2),
+            size: p.random(1, 4),
+            life: p.random(80, 200),
+            maxLife: 0,
+            col:
+              p.random() > 0.5 ? "red" : p.random() > 0.5 ? "purple" : "blue",
+          };
+        }
+
+        // Shared layout — computed once per frame
+        function layout() {
+          const fontSize = Math.min(p.width, p.height) * 0.72;
+          const kanjiHalf = fontSize * 0.46;
+          const gap = 36;
+          const subtitleH = 114;
+          const totalH = kanjiHalf * 2 + gap + subtitleH;
+          const blockTop = p.height / 2 - totalH / 2;
+          return {
+            fontSize,
+            kanjiCY: blockTop + kanjiHalf,
+            subtitleBaseY: blockTop + kanjiHalf * 2 + gap + 72,
+          };
+        }
+
+        p.draw = () => {
+          hueShift += 0.3;
+
+          // Auto-change timer
+          if (txPhase === 0) {
+            kanjiTimer++;
+            if (kanjiTimer >= KANJI_DURATION) triggerTransition();
+          }
+
+          // Advance transition
+          if (txPhase === 1) {
+            txFrame++;
+            if (txFrame >= BREAK_FRAMES) {
+              // Swap kanji and palette at peak corruption
+              currentKanji = nextKanji;
+              palette = PALETTES[currentPalette];
+              txPhase = 2;
+              txFrame = 0;
+              buildGlitchSlices();
+            }
+          } else if (txPhase === 2) {
+            txFrame++;
+            if (txFrame >= REFORM_FRAMES) {
+              txPhase = 0;
+              txFrame = 0;
+            }
+          }
+
+          p.background(0);
+          drawGrid();
+          drawBgKanji();
+          drawParticles();
+
+          const L = layout();
+
+          if (txPhase !== 0) {
+            drawGlitchTransition(L);
+          } else {
+            drawMainKanji(L.kanjiCY, L.fontSize);
+            drawSubtitle(L.subtitleBaseY);
+          }
+
+          drawScanlines();
+
+          // Idle ambient glitch (only when not transitioning)
+          if (txPhase === 0) {
+            if (p.random() < 0.008) {
+              idleGlitchActive = true;
+              idleGlitchTimer = 8;
+              idleGlitchOffset = Array.from({ length: 6 }, () => ({
+                x: p.random(-12, 12),
+                y: p.random(-5, 5),
+                h: p.random(4, 20),
+              }));
+            }
+            if (idleGlitchActive) {
+              drawIdleGlitch();
+              idleGlitchTimer--;
+              if (idleGlitchTimer <= 0) idleGlitchActive = false;
+            }
+          }
+        };
+
+        // ─── GLITCH TRANSITION ────────────────────────────────────────────────────
+        function drawGlitchTransition(L) {
+          let t, intensity;
+          if (txPhase === 1) {
+            t = txFrame / BREAK_FRAMES; // 0→1 breaking apart
+            intensity = t;
+          } else {
+            t = 1 - txFrame / REFORM_FRAMES; // 1→0 reforming
+            intensity = t;
+          }
+
+          // Decide which kanji to show (flicker between old/new near the peak)
+          const showKanji =
+            txPhase === 2
+              ? currentKanji
+              : t > 0.7 && p.random() > 0.4
+                ? nextKanji
+                : currentKanji;
+
+          // Draw the kanji through a clipping slice system — displaced strips
+          const sliceH = p.max(2, p.lerp(8, 2, t));
+          p.drawingContext.save();
+          p.textFont("Zen Tokyo Zoo");
+          p.textSize(L.fontSize);
+          p.textAlign(p.CENTER, p.CENTER);
+
+          for (let y = 0; y < p.height; y += sliceH) {
+            const maxDx = intensity * p.width * 0.28;
+            const dx = p.random(-maxDx, maxDx) * (p.random() > 0.6 ? 1 : 0.05);
+            const dy =
+              p.random(-intensity * 6, intensity * 6) *
+              (p.random() > 0.7 ? 1 : 0);
+
+            p.drawingContext.save();
+            p.drawingContext.beginPath();
+            p.drawingContext.rect(0, y, p.width, sliceH);
+            p.drawingContext.clip();
+
+            // RGB channel split on heavy slices
+            const splitAmount = intensity * 18 * (p.random() > 0.5 ? 1 : 0.1);
+            p.drawingContext.globalAlpha = 0.4;
+            p.drawingContext.fillStyle = `rgb(255,0,80)`;
+            p.drawingContext.shadowBlur = 0;
+            p.drawingContext.font = `${L.fontSize}px 'Zen Tokyo Zoo'`;
+            p.drawingContext.textAlign = "center";
+            p.drawingContext.textBaseline = "middle";
+            p.drawingContext.fillText(
+              showKanji,
+              p.width / 2 + dx - splitAmount,
+              L.kanjiCY + dy,
+            );
+
+            p.drawingContext.fillStyle = `rgb(0,200,255)`;
+            p.drawingContext.fillText(
+              showKanji,
+              p.width / 2 + dx + splitAmount,
+              L.kanjiCY + dy,
+            );
+
+            // Main layer
+            p.drawingContext.globalAlpha = p.lerp(
+              1.0,
+              0.3,
+              intensity * p.random(),
+            );
+            p.drawingContext.fillStyle = "rgb(255,240,255)";
+            p.drawingContext.shadowColor = `rgba(${palette.core[0]},${palette.core[1]},${palette.core[2]},0.9)`;
+            p.drawingContext.shadowBlur = 20 + intensity * 40;
+            p.drawingContext.fillText(
+              showKanji,
+              p.width / 2 + dx,
+              L.kanjiCY + dy,
+            );
+
+            p.drawingContext.restore();
+          }
+
+          // Horizontal noise bars
+          const barCount = Math.floor(intensity * 30);
+          p.noStroke();
+          for (let i = 0; i < barCount; i++) {
+            const by = p.random(p.height);
+            const bh = p.random(2, 18);
+            const bc = p.random([
+              "#ff003c",
+              "#cc00ff",
+              "#00ccff",
+              "#ffee00",
+              "#ffffff",
+            ]);
+            p.fill(bc);
+            p.drawingContext.globalAlpha = p.random(0.05, 0.25) * intensity;
+            p.rect(0, by, p.width, bh);
+          }
+          p.drawingContext.globalAlpha = 1;
+
+          // Displaced pixel slices (from pre-built list)
+          for (let s of glitchSlices) {
+            const dx = s.dx * intensity;
+            const captured = p.get(0, s.y, p.width, s.h);
+            if (captured && captured.width > 0) {
+              p.drawingContext.globalAlpha = (intensity * s.alpha) / 255;
+              p.image(captured, dx, s.y);
+            }
+          }
+          p.drawingContext.globalAlpha = 1;
+
+          // Subtitle fades out during break, in during reform
+          const subtitleA =
+            txPhase === 1 ? p.map(t, 0, 0.4, 255, 0) : p.map(t, 1, 0.4, 0, 255);
+          if (subtitleA > 0) {
+            p.drawingContext.globalAlpha = subtitleA / 255;
+            drawSubtitle(L.subtitleBaseY);
+            p.drawingContext.globalAlpha = 1;
+          }
+
+          p.drawingContext.restore();
+        }
+
+        // ─── NORMAL DRAW ──────────────────────────────────────────────────────────
+        function drawGrid() {
+          const spacing = 50;
+          const pulse = p.sin(p.frameCount * 0.02) * 0.5 + 0.5;
+          p.stroke(
+            palette.outer[0],
+            palette.outer[1],
+            palette.outer[2],
+            12 + pulse * 8,
+          );
+          p.strokeWeight(0.5);
+          for (let x = 0; x < p.width; x += spacing) p.line(x, 0, x, p.height);
+          for (let y = 0; y < p.height; y += spacing) p.line(0, y, p.width, y);
+
+          const gy = p.height * 0.78;
+          p.stroke(
+            palette.mid[0],
+            palette.mid[1],
+            palette.mid[2],
+            20 + pulse * 10,
+          );
+          for (let i = -10; i <= 10; i++) {
+            p.line(p.width / 2, gy, p.width / 2 + i * 80, p.height);
+          }
+          for (let j = 0; j < 8; j++) {
+            const t = j / 7;
+            const ty = p.lerp(gy, p.height, t * t);
+            p.line(0, ty, p.width, ty);
+          }
+        }
+
+        function drawBgKanji() {
+          p.textFont("Zen Tokyo Zoo");
+          for (let bk of bgKanji) {
+            bk.y -= bk.speed;
+            bk.x += bk.drift;
+            if (bk.y < -bk.size) {
+              bk.y = p.height + bk.size;
+              bk.x = p.random(p.width);
+              bk.k = randomKanji();
+            }
+            if (bk.x < -bk.size) bk.x = p.width + bk.size;
+            if (bk.x > p.width + bk.size) bk.x = -bk.size;
+            p.push();
+            p.translate(bk.x, bk.y);
+            p.noStroke();
+            p.fill(palette.core[0], palette.core[1], palette.core[2], bk.alpha);
+            p.textSize(bk.size);
+            p.text(bk.k, 0, 0);
+            p.pop();
+          }
+        }
+
+        function drawParticles() {
+          for (let pt of particles) {
+            pt.x += pt.vx;
+            pt.y += pt.vy;
+            pt.life--;
+            if (pt.life <= 0) {
+              Object.assign(pt, makeParticle());
+              pt.x = p.width / 2 + p.random(-80, 80);
+            }
+            const a = p.map(pt.life, 0, pt.maxLife || 150, 0, 200);
+            if (pt.col === "red") p.stroke(255, 50, 80, a);
+            else if (pt.col === "purple") p.stroke(200, 0, 255, a);
+            else p.stroke(50, 100, 255, a);
+            p.strokeWeight(pt.size);
+            p.point(pt.x, pt.y);
+          }
+        }
+
+        function drawMainKanji(cy, fontSize) {
+          const cx = p.width / 2;
+          const pulse = p.sin(p.frameCount * 0.04) * 0.5 + 0.5;
+          const flicker = p.random() > 0.97 ? p.random(0.6, 1.0) : 1.0;
+
+          p.push();
+          p.translate(cx, cy);
+          p.textFont("Zen Tokyo Zoo");
+          p.textSize(fontSize);
+          p.noStroke();
+
+          const dc = p.drawingContext;
+          dc.shadowColor = `rgba(${palette.outer[0]},${palette.outer[1]},${palette.outer[2]}, 0.5)`;
+          dc.shadowBlur = 120 + pulse * 60;
+          p.fill(palette.outer[0], palette.outer[1], palette.outer[2], 30);
+          p.text(currentKanji, 0, 0);
+
+          dc.shadowColor = `rgba(${palette.mid[0]},${palette.mid[1]},${palette.mid[2]}, 0.8)`;
+          dc.shadowBlur = 60 + pulse * 30;
+          p.fill(palette.mid[0], palette.mid[1], palette.mid[2], 80 * flicker);
+          p.text(currentKanji, 0, 0);
+
+          dc.shadowColor = `rgba(${palette.core[0]},${palette.core[1]},${palette.core[2]}, 1.0)`;
+          dc.shadowBlur = 30 + pulse * 15;
+          p.fill(
+            palette.core[0],
+            palette.core[1],
+            palette.core[2],
+            200 * flicker,
+          );
+          p.text(currentKanji, 0, 0);
+
+          dc.shadowColor = `rgba(${palette.accent[0]},${palette.accent[1]},${palette.accent[2]}, 1.0)`;
+          dc.shadowBlur = 12;
+          p.fill(255, 240, 255, 230 * flicker);
+          p.text(currentKanji, 0, 0);
+
+          dc.shadowColor = `rgba(${palette.core[0]},${palette.core[1]},${palette.core[2]}, 0.9)`;
+          dc.shadowBlur = 8;
+          p.noFill();
+          p.stroke(
+            palette.core[0],
+            palette.core[1],
+            palette.core[2],
+            160 * flicker,
+          );
+          p.strokeWeight(1.5);
+          p.text(currentKanji, 0, 0);
+
+          dc.shadowBlur = 0;
+          p.pop();
+        }
+
+        function drawSubtitle(baseY) {
+          const data = KANJI_DATA[currentKanji];
+          if (!data) return;
+
+          const cx = p.width / 2;
+          const pulse = p.sin(p.frameCount * 0.04) * 0.5 + 0.5;
+          const dc = p.drawingContext;
+          p.noStroke();
+          p.textAlign(p.CENTER, p.CENTER);
+
+          const lineW = 300;
+          const lineY = baseY - 82;
+          dc.shadowColor = `rgba(${palette.accent[0]},${palette.accent[1]},${palette.accent[2]},0.8)`;
+          dc.shadowBlur = 6;
+          p.stroke(
+            palette.accent[0],
+            palette.accent[1],
+            palette.accent[2],
+            120 + pulse * 60,
+          );
+          p.strokeWeight(1);
+          p.line(cx - lineW / 2, lineY, cx + lineW / 2, lineY);
+          p.noStroke();
+
+          dc.shadowColor = `rgba(${palette.core[0]},${palette.core[1]},${palette.core[2]},1.0)`;
+          dc.shadowBlur = 18 + pulse * 10;
+          p.textFont("M PLUS 1");
+          p.textSize(80);
+          p.fill(255, 240, 255, 220);
+          p.text(data.kana, cx, baseY);
+
+          dc.shadowColor = `rgba(${palette.accent[0]},${palette.accent[1]},${palette.accent[2]},0.9)`;
+          dc.shadowBlur = 10 + pulse * 6;
+          p.textFont("Share Tech Mono");
+          p.textSize(48);
+          p.fill(palette.accent[0], palette.accent[1], palette.accent[2], 200);
+          p.text(data.romaji.toUpperCase(), cx, baseY + 100);
+
+          dc.shadowColor = `rgba(${palette.mid[0]},${palette.mid[1]},${palette.mid[2]},0.8)`;
+          dc.shadowBlur = 8;
+          p.textSize(48);
+          p.fill(palette.mid[0], palette.mid[1], palette.mid[2], 180);
+          p.text(`[ ${data.meaning} ]`, cx, baseY + 174);
+
+          dc.shadowBlur = 0;
+        }
+
+        function drawScanlines() {
+          scanY = (scanY + 1.5) % p.height;
+          const grad = p.height * 0.06;
+          for (let i = 0; i < grad; i++) {
+            const y = (scanY + i) % p.height;
+            const a = p.map(i, 0, grad, 12, 0);
+            p.stroke(palette.core[0], palette.core[1], palette.core[2], a);
+            p.strokeWeight(1);
+            p.line(0, y, p.width, y);
+          }
+          p.stroke(0, 0, 0, 25);
+          p.strokeWeight(1);
+          for (let y = 0; y < p.height; y += 3) {
+            p.line(0, y, p.width, y);
+          }
+        }
+
+        function drawIdleGlitch() {
+          for (let g of idleGlitchOffset) {
+            const sy = p.random(p.height);
+            const r = p.get(0, sy, p.width, g.h);
+            if (r && r.width > 0) p.image(r, g.x, sy);
+            p.fill(palette.core[0], 0, 0, 40);
+            p.noStroke();
+            p.rect(0, sy, p.width, g.h * 0.5);
+            p.fill(0, 0, palette.outer[2], 30);
+            p.rect(g.x * 2, sy + g.h * 0.3, p.width, g.h * 0.3);
+          }
+        }
+
+        p.mousePressed = () => {
+          triggerTransition();
+        };
+
+        p.windowResized = () => {
+          p.resizeCanvas(p.windowWidth, p.windowHeight);
+        };
+      };
+    </script>
+  </body>
+</html>
