@@ -11,9 +11,9 @@ let nPatches = 7;
 let margin = 20;
 // sketch.js used 1000 iterations to fully bloom a 1000x1000 canvas (1M px);
 // this canvas is ~2x the area, so scale the initial burst to match density
-let bloomIterations = 2100;
+let bloomIterations = 2000;
 let itersPerFrame = 6; // ongoing paint per frame that trails behind each moving patch
-let reshuffleEvery = 400; // frames between patches getting fresh colors/velocities
+let reshuffleEvery = 500; // frames between patches getting fresh colors/velocities
 let driftSpeed = [5, 15]; // px/frame range each patch sweeps across the canvas
 
 let colorsTop = [
@@ -186,7 +186,7 @@ function paintBatch(iterations) {
 function paintPatchRect(patch) {
   blendMode(random() < 0.5 ? HARD_LIGHT : BLEND);
   const c = patch.color;
-  fill(c[0], c[1], c[2], random(0, 6));
+  fill(c[0], c[1], c[2]); // , random(0, 6)
   rect(
     random(patch.xRange[0], patch.xRange[1]),
     random(patch.yRange[0], patch.yRange[1]),
