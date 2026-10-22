@@ -10,7 +10,7 @@ function setup() {
 
   let palette = [
     color(30, 70, 160),
-    color(220, 70, 45),
+    color(214, 74, 50),
     color(239, 172, 70),
     color(30, 28, 30),
   ];
@@ -35,6 +35,8 @@ function setup() {
         c: random(palette),
         angle: 0,
         targetAngle: 0,
+        radius: 0, // 0 = square, 1 = circle
+        targetRadius: 0,
         nextMove: random(60, 300),
       });
     }
@@ -66,6 +68,8 @@ function draw() {
         // Boxed in: sometimes do a quarter turn instead
         s.targetAngle += random([HALF_PI, -HALF_PI]);
       }
+      // Sometimes morph between square and circle
+      if (random() < 0.3) s.targetRadius = 1 - s.targetRadius;
       s.nextMove = frameCount + random(60, 300);
     }
 
@@ -73,12 +77,14 @@ function draw() {
     s.x = lerp(s.x, cellX(s.col), 0.1);
     s.y = lerp(s.y, cellY(s.row), 0.1);
     s.angle = lerp(s.angle, s.targetAngle, 0.1);
+    s.radius = lerp(s.radius, s.targetRadius, 0.1);
 
     push();
     translate(s.x + size / 2, s.y + size / 2);
     rotate(s.angle);
     fill(s.c);
-    square(-size / 2, -size / 2, size);
+    // Corner radius of half the size turns the square into a circle
+    square(-size / 2, -size / 2, size, s.radius * size / 2);
     pop();
   }
 }
