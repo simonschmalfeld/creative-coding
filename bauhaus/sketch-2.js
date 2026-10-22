@@ -89,6 +89,29 @@ function draw() {
   }
 }
 
+// Press R to record a 10 second clip of the canvas (downloads a .webm)
+function keyPressed() {
+  if (key === 'r' || key === 'R') {
+    let stream = document.querySelector('canvas').captureStream(60);
+    let recorder = new MediaRecorder(stream, {
+      mimeType: MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+        ? 'video/webm;codecs=vp9'
+        : 'video/webm',
+      videoBitsPerSecond: 25_000_000, // high bitrate so flat colours stay crisp
+    });
+    let chunks = [];
+    recorder.ondataavailable = (e) => chunks.push(e.data);
+    recorder.onstop = () => {
+      let a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob(chunks, { type: 'video/webm' }));
+      a.download = 'bauhaus.webm';
+      a.click();
+    };
+    recorder.start();
+    setTimeout(() => recorder.stop(), 10000);
+  }
+}
+
 function cellX(i) {
   return gap + i * (size + gap);
 }
