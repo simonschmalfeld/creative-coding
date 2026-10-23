@@ -6,7 +6,8 @@ let squares = [];
 let occupied = []; // occupied[i][j] is true when a square owns that cell
 
 function setup() {
-  createCanvas(1080, 1350);
+  createCanvas(1080, 1920);
+  pixelDensity(1); // so the recording is exactly 1080x1920, not 2x on retina screens
 
   let palette = [
     color(30, 70, 160),
@@ -89,26 +90,24 @@ function draw() {
   }
 }
 
-// Press R to record a 10 second clip of the canvas (downloads a .webm)
+// p5.capture renders frame by frame, so the clip is smooth even if the browser can't keep up
+P5Capture.setDefaultOptions({
+  format: 'mp4',
+  framerate: 60,
+  duration: 1200, // frames, so 20 seconds at 60 fps
+  quality: 1,
+  disableUi: true,
+  baseFilename: () => 'bauhaus-2',
+});
+
+// Press R to record a 20 second clip (downloads an .mp4), S to save a screenshot (.png)
 function keyPressed() {
   if (key === 'r' || key === 'R') {
-    let stream = document.querySelector('canvas').captureStream(60);
-    let recorder = new MediaRecorder(stream, {
-      mimeType: MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
-        ? 'video/webm;codecs=vp9'
-        : 'video/webm',
-      videoBitsPerSecond: 25_000_000, // high bitrate so flat colours stay crisp
-    });
-    let chunks = [];
-    recorder.ondataavailable = (e) => chunks.push(e.data);
-    recorder.onstop = () => {
-      let a = document.createElement('a');
-      a.href = URL.createObjectURL(new Blob(chunks, { type: 'video/webm' }));
-      a.download = 'bauhaus.webm';
-      a.click();
-    };
-    recorder.start();
-    setTimeout(() => recorder.stop(), 10000);
+    let capture = P5Capture.getInstance();
+    if (capture.state === 'idle') capture.start();
+  }
+  if (key === 's' || key === 'S') {
+    saveCanvas('bauhaus-2', 'png');
   }
 }
 
